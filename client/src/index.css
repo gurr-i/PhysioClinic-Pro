@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(30, 15%, 15%);
+  --muted: hsl(210, 40%, 98%);
+  --muted-foreground: hsl(215, 16%, 47%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(30, 15%, 15%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(30, 15%, 15%);
+  --border: hsl(214, 32%, 91%);
+  --input: hsl(214, 32%, 91%);
+  --primary: hsl(221, 83%, 53%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --secondary: hsl(210, 40%, 96%);
+  --secondary-foreground: hsl(222, 84%, 5%);
+  --accent: hsl(210, 40%, 96%);
+  --accent-foreground: hsl(222, 84%, 5%);
+  --destructive: hsl(0, 84%, 60%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --ring: hsl(221, 83%, 53%);
+  --radius: 0.5rem;
+  
+  /* Custom medical theme colors */
+  --medical-blue: hsl(221, 83%, 53%);
+  --health-green: hsl(158, 64%, 52%);
+  --soft-white: hsl(210, 40%, 98%);
+  --dark-slate: hsl(215, 16%, 19%);
+  --accent-purple: hsl(262, 83%, 58%);
+  --warning-amber: hsl(43, 96%, 56%);
+  --glass-bg: hsla(0, 0%, 100%, 0.25);
+  --glass-border: hsla(0, 0%, 100%, 0.18);
+}
+
+.dark {
+  --background: hsl(222, 84%, 4%);
+  --foreground: hsl(210, 40%, 98%);
+  --muted: hsl(217, 32%, 17%);
+  --muted-foreground: hsl(215, 20%, 65%);
+  --popover: hsl(222, 84%, 4%);
+  --popover-foreground: hsl(210, 40%, 98%);
+  --card: hsl(217, 32%, 17%);
+  --card-foreground: hsl(210, 40%, 98%);
+  --border: hsl(217, 32%, 17%);
+  --input: hsl(217, 32%, 17%);
+  --primary: hsl(221, 83%, 53%);
+  --primary-foreground: hsl(222, 84%, 4%);
+  --secondary: hsl(217, 32%, 17%);
+  --secondary-foreground: hsl(210, 40%, 98%);
+  --accent: hsl(217, 32%, 17%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 62%, 30%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --ring: hsl(221, 83%, 53%);
+  
+  /* Dark mode medical theme colors */
+  --medical-blue: hsl(221, 83%, 63%);
+  --health-green: hsl(158, 64%, 62%);
+  --soft-white: hsl(217, 32%, 17%);
+  --dark-slate: hsl(210, 40%, 98%);
+  --accent-purple: hsl(262, 83%, 68%);
+  --warning-amber: hsl(43, 96%, 66%);
+  --glass-bg: hsla(222, 84%, 4%, 0.25);
+  --glass-border: hsla(210, 40%, 98%, 0.18);
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background text-foreground;
+}
+
+.glass-effect {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+}
+
+.hover-liquid:hover {
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
+}
+
+.liquid-gradient {
+  background: linear-gradient(135deg, var(--card) 0%, var(--muted) 100%);
+}
+
+.dark {
+  --background: hsl(222, 84%, 5%);
+  --foreground: hsl(210, 40%, 98%);
+  --muted: hsl(217, 33%, 17%);
+  --muted-foreground: hsl(215, 20%, 65%);
+  --popover: hsl(222, 84%, 5%);
+  --popover-foreground: hsl(210, 40%, 98%);
+  --card: hsl(222, 84%, 5%);
+  --card-foreground: hsl(210, 40%, 98%);
+  --border: hsl(217, 33%, 17%);
+  --input: hsl(217, 33%, 17%);
+  --primary: hsl(221, 83%, 53%);
+  --primary-foreground: hsl(222, 84%, 5%);
+  --secondary: hsl(217, 33%, 17%);
+  --secondary-foreground: hsl(210, 40%, 98%);
+  --accent: hsl(217, 33%, 17%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 63%, 31%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --ring: hsl(221, 83%, 53%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+  }
+
+  body:not(.dark) {
+    @apply bg-gradient-to-br from-slate-50 to-blue-50;
+  }
+
+  .dark body {
+    @apply bg-gradient-to-br from-gray-900 to-slate-900;
+  }
+}
+
+@layer utilities {
+  .glass-effect {
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+  }
+  
+  .liquid-gradient {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+  }
+  
+  .hover-liquid {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .hover-liquid:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  }
+  
+  .nav-item {
+    transition: all 0.2s ease;
+  }
+  
+  .nav-item:hover {
+    background: rgba(37, 99, 235, 0.1);
+    border-radius: 12px;
+  }
+  
+  .nav-item.active {
+    background: linear-gradient(135deg, var(--medical-blue) 0%, hsl(221, 83%, 60%) 100%);
+    color: white;
+    border-radius: 12px;
+  }
+}
