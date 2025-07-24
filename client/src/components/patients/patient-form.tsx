@@ -7,21 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { LoadingButton } from "@/components/ui/loading";
+import { Badge } from "@/components/ui/badge";
+import { useFormValidation, useAutoSave } from "@/hooks/use-form-validation";
 import { queryClient } from "@/lib/queryClient";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Save, Clock } from "lucide-react";
 
 interface PatientFormProps {
   patient?: Patient | null;
   onSuccess: () => void;
+  enableAutoSave?: boolean;
 }
 
-export default function PatientForm({ patient, onSuccess }: PatientFormProps) {
+export default function PatientForm({ patient, onSuccess, enableAutoSave = false }: PatientFormProps) {
   const { toast } = useToast();
   const isEditing = !!patient;
 
   const form = useForm<InsertPatient>({
     resolver: zodResolver(insertPatientSchema),
+    mode: "onChange", // Enable real-time validation
     defaultValues: {
       name: patient?.name || "",
       age: patient?.age || 0,
@@ -33,6 +39,25 @@ export default function PatientForm({ patient, onSuccess }: PatientFormProps) {
       emergencyContact: patient?.emergencyContact || "",
     },
   });
+
+  // Watch form values for auto-save
+  const formValues = form.watch();
+
+  // Auto-save functionality for editing
+  const { isSaving, lastSaved, hasUnsavedChanges } = useAutoSave(
+    formValues,
+    async (values) => {
+      if (isEditing && patient) {
+        await apiRequest("PUT", `/api/patients/${patient.id}`, values);
+        queryClient.invalidateQueries({ queryKey: ["/api/patients"] });
+      }
+    },
+    {
+      enabled: enableAutoSave && isEditing,
+      delay: 2000,
+      skipInitial: true,
+    }
+  );
 
   const createPatientMutation = useMutation({
     mutationFn: (data: InsertPatient) => apiRequest("POST", "/api/patients", data),
@@ -85,6 +110,36 @@ export default function PatientForm({ patient, onSuccess }: PatientFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        {/* Auto-save status */}
+        {enableAutoSave && isEditing && (
+          <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <div className="flex items-center space-x-2">
+              {isSaving ? (
+                <>
+                  <Save className="w-4 h-4 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">Saving...</span>
+                </>
+              ) : hasUnsavedChanges ? (
+                <>
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <span className="text-sm text-muted-foreground">Unsaved changes</span>
+                </>
+              ) : lastSaved ? (
+                <>
+                  <Save className="w-4 h-4 text-green-500" />
+                  <span className="text-sm text-muted-foreground">
+                    Saved {lastSaved.toLocaleTimeString()}
+                  </span>
+                </>
+              ) : null}
+            </div>
+            {hasUnsavedChanges && (
+              <Badge variant="outline" className="text-xs">
+                Auto-save enabled
+              </Badge>
+            )}
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -219,13 +274,14 @@ export default function PatientForm({ patient, onSuccess }: PatientFormProps) {
           <Button type="button" variant="outline" onClick={onSuccess}>
             Cancel
           </Button>
-          <Button 
-            type="submit" 
-            disabled={isPending}
+          <LoadingButton
+            type="submit"
+            isLoading={isPending}
+            loadingText={isEditing ? "Updating..." : "Creating..."}
             className="bg-gradient-to-r from-[var(--medical-blue)] to-blue-600"
           >
-            {isPending ? "Saving..." : isEditing ? "Update Patient" : "Create Patient"}
-          </Button>
+            {isEditing ? "Update Patient" : "Create Patient"}
+          </LoadingButton>
         </div>
       </form>
     </Form>

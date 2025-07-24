@@ -3,6 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ErrorBoundary } from "@/components/error-boundary";
 import Dashboard from "@/pages/dashboard";
 import Patients from "@/pages/patients";
 import Appointments from "@/pages/appointments";
@@ -17,22 +18,24 @@ import Sidebar from "@/components/layout/sidebar";
 
 function Router() {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Switch>
-          <Route path="/" component={Dashboard} />
-          <Route path="/patients" component={Patients} />
-          <Route path="/appointments" component={Appointments} />
-          <Route path="/payments" component={Payments} />
-          <Route path="/advance-payments" component={AdvancePayments} />
-          <Route path="/inventory" component={Inventory} />
-          <Route path="/reports" component={Reports} />
-          <Route path="/database-backup" component={DatabaseBackup} />
-          <Route component={NotFound} />
-        </Switch>
+    <ErrorBoundary>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/patients" component={Patients} />
+            <Route path="/appointments" component={Appointments} />
+            <Route path="/payments" component={Payments} />
+            <Route path="/advance-payments" component={AdvancePayments} />
+            <Route path="/inventory" component={Inventory} />
+            <Route path="/reports" component={Reports} />
+            <Route path="/database-backup" component={DatabaseBackup} />
+            <Route component={NotFound} />
+          </Switch>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 }
 

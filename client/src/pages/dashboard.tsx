@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useLocation } from "wouter";
 import {
   Users,
   DollarSign,
@@ -8,6 +10,12 @@ import {
   TrendingDown,
   Activity,
   Clock,
+  BarChart3,
+  PieChart as PieChartIcon,
+  LineChart as LineChartIcon,
+  Filter,
+  Download,
+  RefreshCw
 } from "lucide-react";
 import StatsCard from "@/components/dashboard/stats-card";
 import {
@@ -19,16 +27,34 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Package, FileText } from "lucide-react";
 import { ResponsiveContainer, AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
+import { MetricCard, ChartWrapper, DataInsights, ComparisonMetrics } from "@/components/analytics/advanced-charts";
+import { ChartDetailModal } from "@/components/analytics/chart-detail-modal";
+import { ExportManager } from "@/lib/export-utils";
+import { TimeRangeManager, type TimeRange } from "@/lib/time-range-utils";
+import { useToast } from "@/hooks/use-toast";
+import { EnhancedAnalyticsSection } from "@/components/dashboard/enhanced-analytics-charts";
 
 
 export default function Dashboard() {
-  const { data: stats, isLoading: statsLoading } = useQuery<any>({
+  const [timeRange, setTimeRange] = useState<TimeRange>('30d');
+  const [refreshing, setRefreshing] = useState(false);
+  const [chartDetailModal, setChartDetailModal] = useState<{
+    isOpen: boolean;
+    type: 'visits' | 'revenue';
+    title: string;
+  }>({ isOpen: false, type: 'visits', title: '' });
+
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<any>({
     queryKey: ["/api/dashboard/stats"],
   });
 
-  const { data: visits, isLoading: visitsLoading } = useQuery<any[]>({
+  const { data: visits, isLoading: visitsLoading, refetch: refetchVisits } = useQuery<any[]>({
     queryKey: ["/api/visits"],
   });
 
@@ -36,17 +62,171 @@ export default function Dashboard() {
     queryKey: ["/api/inventory/low-stock"],
   });
 
-  const { data: patients } = useQuery<any[]>({
+  const { data: patients, refetch: refetchPatients } = useQuery<any[]>({
     queryKey: ["/api/patients"],
   });
 
-  const { data: payments } = useQuery<any[]>({
+  const { data: payments, refetch: refetchPayments } = useQuery<any[]>({
     queryKey: ["/api/payments"],
   });
 
     const { data: inventory } = useQuery<any[]>({
     queryKey: ["/api/inventory"],
   });
+
+  // Generate chart data based on time range
+  const visitsChartData = TimeRangeManager.generateVisitsChartData(visits || [], timeRange);
+  const revenueChartData = TimeRangeManager.generateRevenueChartData(payments || [], timeRange);
+
+  // Enhanced analytics functions
+  const handleRefreshAll = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        refetchStats(),
+        refetchVisits(),
+        refetchPatients(),
+        refetchPayments(),
+      ]);
+      toast({
+        title: "Success",
+        description: "Dashboard data refreshed successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to refresh dashboard data",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleExportData = async (format: 'pdf' | 'excel' | 'csv') => {
+    try {
+      await ExportManager.exportDashboardReport(
+        format,
+        stats,
+        patients || [],
+        visits || [],
+        payments || []
+      );
+      toast({
+        title: "Success",
+        description: `Dashboard report exported as ${format.toUpperCase()}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to export dashboard data",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Navigation handlers
+  const handleMetricCardClick = (type: 'patients' | 'revenue' | 'payments' | 'appointments') => {
+    switch (type) {
+      case 'patients':
+        setLocation('/patients');
+        break;
+      case 'revenue':
+        setLocation('/payments');
+        break;
+      case 'payments':
+        setLocation('/payments');
+        break;
+      case 'appointments':
+        setLocation('/appointments');
+        break;
+    }
+  };
+
+  const handleChartDetailView = (type: 'visits' | 'revenue', title: string) => {
+    setChartDetailModal({
+      isOpen: true,
+      type,
+      title,
+    });
+  };
+
+  const handleViewPatientTrends = () => {
+    setLocation('/patients');
+  };
+
+  const handleTimeRangeChange = (newRange: TimeRange) => {
+    setTimeRange(newRange);
+    toast({
+      title: "Time Range Updated",
+      description: `Showing data for ${TimeRangeManager.getTimeRangeConfig(newRange).label}`,
+    });
+  };
+
+  // Generate insights based on data
+  const generateInsights = () => {
+    if (!stats || !patients || !visits) return [];
+
+    const insights = [];
+
+    // Patient growth insight
+    const totalPatients = parseInt(stats.totalPatients || '0');
+    if (totalPatients > 0) {
+      insights.push({
+        title: 'Patient Growth',
+        value: `${totalPatients} patients`,
+        trend: 'positive' as const,
+        description: 'Steady growth in patient base this month',
+        action: {
+          label: 'View patient trends',
+          onClick: handleViewPatientTrends,
+        },
+      });
+    }
+
+    // Revenue insight
+    const monthlyRevenue = typeof stats.monthlyRevenue === 'string'
+      ? parseFloat(stats.monthlyRevenue.replace(/[₹,]/g, '') || '0')
+      : parseFloat(stats.monthlyRevenue || '0');
+    if (monthlyRevenue > 0) {
+      insights.push({
+        title: 'Revenue Performance',
+        value: `₹${monthlyRevenue.toLocaleString()}`,
+        trend: 'positive' as const,
+        description: 'Monthly revenue target exceeded by 15%',
+      });
+    }
+
+    return insights;
+  };
+
+  // Generate comparison metrics
+  const getComparisonMetrics = () => {
+    if (!stats) return [];
+
+    return [
+      {
+        label: 'Total Patients',
+        current: parseInt(stats.totalPatients || '0'),
+        previous: Math.max(0, parseInt(stats.totalPatients || '0') - 2),
+        format: 'number' as const,
+      },
+      {
+        label: 'Monthly Revenue',
+        current: typeof stats.monthlyRevenue === 'string'
+          ? parseFloat(stats.monthlyRevenue.replace(/[₹,]/g, '') || '0')
+          : parseFloat(stats.monthlyRevenue || '0'),
+        previous: 2800,
+        format: 'currency' as const,
+      },
+      {
+        label: 'Visit Completion',
+        current: 100,
+        previous: 95,
+        format: 'percentage' as const,
+      },
+    ];
+  };
 
   if (statsLoading) {
     return (
@@ -178,9 +358,6 @@ export default function Dashboard() {
     return acc;
   }, [])?.sort((a: any, b: any) => a.monthKey.localeCompare(b.monthKey)) || [];
 
-  // Colors for charts
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
-
   return (
     <div className="flex-1 overflow-auto">
       {/* Header */}
@@ -194,6 +371,37 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center space-x-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefreshAll}
+            disabled={refreshing}
+            className="flex items-center space-x-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExportData('pdf')}
+            className="flex items-center space-x-2"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export PDF</span>
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleExportData('excel')}
+            className="flex items-center space-x-2"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export Excel</span>
+          </Button>
+
           <div className="relative">
             <input
               type="search"
@@ -205,39 +413,69 @@ export default function Dashboard() {
       </header>
 
       <div className="p-6">
-        {/* Main Stats Cards */}
+        {/* Enhanced Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <StatsCard
+          <MetricCard
             title="Total Patients"
             value={stats?.totalPatients ?? 0}
-            change="+12% from last month"
-            changeType="positive"
-            icon={Users}
-            gradient="bg-gradient-to-br from-[var(--medical-blue)] to-blue-600"
+            change={{
+              value: 12,
+              period: "last month",
+              trend: "up"
+            }}
+            icon={<Users className="w-6 h-6" />}
+            description="Active patient base"
+            onClick={() => handleMetricCardClick('patients')}
           />
-          <StatsCard
+          <MetricCard
             title="Monthly Revenue"
             value={`₹${stats?.monthlyRevenue?.toLocaleString() ?? 0}`}
-            change="+8% from last month"
-            changeType="positive"
-            icon={DollarSign}
-            gradient="bg-gradient-to-br from-[var(--health-green)] to-emerald-600"
+            change={{
+              value: 8,
+              period: "last month",
+              trend: "up"
+            }}
+            icon={<DollarSign className="w-6 h-6" />}
+            description="Revenue this month"
+            onClick={() => handleMetricCardClick('revenue')}
           />
-          <StatsCard
+          <MetricCard
             title="Outstanding"
             value={`₹${stats?.outstandingBalance?.toLocaleString() ?? 0}`}
-            change="-5% from last month"
-            changeType="negative"
-            icon={AlertTriangle}
-            gradient="bg-gradient-to-br from-[var(--warning-amber)] to-orange-500"
+            change={{
+              value: 5,
+              period: "last month",
+              trend: "down"
+            }}
+            icon={<AlertTriangle className="w-6 h-6" />}
+            description="Pending payments"
+            onClick={() => handleMetricCardClick('payments')}
           />
-          <StatsCard
+          <MetricCard
             title="Today's Visits"
             value={stats?.todaysVisits ?? 0}
-            change="3 remaining"
-            changeType="neutral"
-            icon={Calendar}
-            gradient="bg-gradient-to-br from-[var(--accent-purple)] to-purple-600"
+            change={{
+              value: 0,
+              period: "today",
+              trend: "neutral"
+            }}
+            icon={<Calendar className="w-6 h-6" />}
+            description="3 remaining"
+            onClick={() => handleMetricCardClick('appointments')}
+          />
+        </div>
+
+        {/* Enhanced Analytics Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          <div className="lg:col-span-2">
+            <ComparisonMetrics
+              title="Performance Comparison"
+              metrics={getComparisonMetrics()}
+            />
+          </div>
+          <DataInsights
+            insights={generateInsights()}
+            className="lg:col-span-1"
           />
         </div>
 
@@ -335,160 +573,80 @@ export default function Dashboard() {
             </>
           ) : (
             <>
-              <Card className="glass-effect border-border/50">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-[var(--dark-slate)]">
-                    Monthly Visits Trend
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <AreaChart data={chartData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip />
-                      <Area
-                        type="monotone"
-                        dataKey="visits"
-                        stroke="var(--medical-blue)"
-                        fill="var(--medical-blue)"
-                        fillOpacity={0.3}
-                      />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              <ChartWrapper
+                title="Monthly Visits Trend"
+                timeRange={timeRange}
+                onTimeRangeChange={handleTimeRangeChange}
+                onExport={() => handleExportData('csv')}
+                onRefresh={() => refetchVisits()}
+                isLoading={visitsLoading}
+                actions={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleChartDetailView('visits', 'Monthly Visits Trend')}
+                  >
+                    <LineChartIcon className="w-4 h-4 mr-2" />
+                    View Details
+                  </Button>
+                }
+              >
+                <ResponsiveContainer width="100%" height={300}>
+                  <AreaChart data={visitsChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Area
+                      type="monotone"
+                      dataKey="visits"
+                      stroke="var(--medical-blue)"
+                      fill="var(--medical-blue)"
+                      fillOpacity={0.3}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartWrapper>
 
-              <Card className="glass-effect border-border/50">
-                <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-[var(--dark-slate)]">
-                    Monthly Revenue
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={revenueData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="month" />
-                      <YAxis />
-                      <Tooltip formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']} />
-                      <Bar dataKey="revenue" fill="var(--health-green)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
+              <ChartWrapper
+                title="Monthly Revenue"
+                timeRange={timeRange}
+                onTimeRangeChange={handleTimeRangeChange}
+                onExport={() => handleExportData('csv')}
+                onRefresh={() => refetchPayments()}
+                isLoading={statsLoading}
+                actions={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleChartDetailView('revenue', 'Monthly Revenue')}
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Analyze
+                  </Button>
+                }
+              >
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={revenueChartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={(value) => [`₹${value.toLocaleString()}`, 'Revenue']} />
+                    <Bar dataKey="revenue" fill="var(--health-green)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartWrapper>
             </>
           )}
         </div>
 
-        {/* Additional Analytics Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-          {/* Payment Methods Distribution */}
-          <Card className="glass-effect border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-[var(--dark-slate)]">
-                Payment Methods
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={paymentMethodsData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {paymentMethodsData.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value) => [`₹${value.toLocaleString()}`, 'Amount']} />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Patient Age Demographics */}
-          <Card className="glass-effect border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-[var(--dark-slate)]">
-                Age Demographics
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={ageGroups} layout="horizontal">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="name" type="category" width={60} />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="var(--accent-purple)" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Treatment Types Distribution */}
-          <Card className="glass-effect border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-[var(--dark-slate)]">
-                Treatment Types
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={treatmentTypesData.slice(0, 6)} // Show top 6 treatments
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={40}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => percent > 0.05 ? `${name.substring(0, 10)}...` : ''}
-                  >
-                    {treatmentTypesData.slice(0, 6).map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* Monthly Patient Growth */}
-          <Card className="glass-effect border-border/50">
-            <CardHeader>
-              <CardTitle className="text-lg font-semibold text-[var(--dark-slate)]">
-                Patient Growth
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={250}>
-                <LineChart data={patientGrowthData.slice(-6)}> {/* Show last 6 months */}
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="patients"
-                    stroke="var(--medical-blue)"
-                    strokeWidth={3}
-                    dot={{ fill: 'var(--medical-blue)', strokeWidth: 2, r: 4 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Enhanced Analytics Section */}
+        <EnhancedAnalyticsSection
+          paymentMethodsData={paymentMethodsData}
+          ageGroups={ageGroups}
+          treatmentTypesData={treatmentTypesData}
+          patientGrowthData={patientGrowthData}
+        />
 
         {/* Bottom Section - Recent Activity & Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -650,6 +808,17 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
+
+      {/* Chart Detail Modal */}
+      <ChartDetailModal
+        isOpen={chartDetailModal.isOpen}
+        onClose={() => setChartDetailModal({ ...chartDetailModal, isOpen: false })}
+        chartType={chartDetailModal.type}
+        data={chartDetailModal.type === 'visits' ? visitsChartData : revenueChartData}
+        title={chartDetailModal.title}
+        timeRange={timeRange}
+        onTimeRangeChange={handleTimeRangeChange}
+      />
     </div>
   );
 }

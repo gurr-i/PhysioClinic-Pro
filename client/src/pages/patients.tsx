@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, Filter, Eye, Edit2, Trash2 } from "lucide-react";
+import { Plus, Search, Filter, Eye, Edit2, Trash2, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ProgressiveLoading, TableSkeleton, EmptyState, LoadingButton } from "@/components/ui/loading";
+import { EnhancedSearch } from "@/components/ui/enhanced-search";
+import { useAdvancedFilter, useSearchHistory } from "@/hooks/use-debounced-search";
 import PatientForm from "@/components/patients/patient-form";
 import PatientDetailView from "@/components/patients/patient-detail-view";
 import { queryClient } from "@/lib/queryClient";
@@ -17,14 +20,18 @@ import { useToast } from "@/hooks/use-toast";
 import type { Patient } from "@shared/schema";
 
 export default function Patients() {
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isViewOpen, setIsViewOpen] = useState(false);
   const [viewingPatient, setViewingPatient] = useState<Patient | null>(null);
+  const [filterCriteria, setFilterCriteria] = useState({
+    condition: '',
+    paymentStatus: '',
+  });
   const { toast } = useToast();
+  const { searchHistory, addToHistory } = useSearchHistory();
 
-  const { data: patients, isLoading } = useQuery<Patient[]>({
+  const { data: patients, isLoading, error, refetch } = useQuery<Patient[]>({
     queryKey: ["/api/patients"],
   });
 
@@ -50,10 +57,19 @@ export default function Patients() {
     },
   });
 
-  const filteredPatients = (patients || []).filter((patient: Patient) =>
-    patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    patient.phone.includes(searchTerm)
+  // Enhanced search and filtering
+  const {
+    searchTerm,
+    setSearchTerm,
+    filteredItems: filteredPatients,
+    isSearching,
+    highlightMatch,
+    isEmpty: isSearchEmpty,
+  } = useAdvancedFilter(
+    patients || [],
+    ['name', 'email', 'phone', 'medicalHistory'],
+    filterCriteria,
+    { delay: 300, minLength: 1 }
   );
 
   const handleEdit = (patient: Patient) => {
@@ -126,27 +142,36 @@ export default function Patients() {
         <Card className="glass-effect border-border/50 mb-6">
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search patients..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 bg-background/80 backdrop-blur-sm border-border focus-visible:ring-ring"
-                />
-              </div>
-              <Select>
+              <EnhancedSearch
+                value={searchTerm}
+                onChange={setSearchTerm}
+                onSearch={(term) => addToHistory(term)}
+                placeholder="Search patients by name, email, phone..."
+                isLoading={isSearching}
+                recentSearches={searchHistory}
+                popularSearches={['back pain', 'knee injury', 'shoulder pain']}
+                className="bg-background/80 backdrop-blur-sm border-border"
+                showSuggestions={true}
+              />
+              <Select
+                value={filterCriteria.condition || "all"}
+                onValueChange={(value) => setFilterCriteria(prev => ({ ...prev, condition: value === "all" ? "" : value }))}
+              >
                 <SelectTrigger className="bg-background/80 backdrop-blur-sm border-border">
                   <SelectValue placeholder="All Conditions" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Conditions</SelectItem>
-                  <SelectItem value="back-pain">Back Pain</SelectItem>
-                  <SelectItem value="knee-injury">Knee Injury</SelectItem>
-                  <SelectItem value="shoulder-issues">Shoulder Issues</SelectItem>
+                  <SelectItem value="back pain">Back Pain</SelectItem>
+                  <SelectItem value="knee">Knee Issues</SelectItem>
+                  <SelectItem value="shoulder">Shoulder Issues</SelectItem>
+                  <SelectItem value="neck">Neck Pain</SelectItem>
                 </SelectContent>
               </Select>
-              <Select>
+              <Select
+                value={filterCriteria.paymentStatus || "all"}
+                onValueChange={(value) => setFilterCriteria(prev => ({ ...prev, paymentStatus: value === "all" ? "" : value }))}
+              >
                 <SelectTrigger className="bg-card/70 backdrop-blur-sm">
                   <SelectValue placeholder="Payment Status" />
                 </SelectTrigger>
@@ -168,58 +193,65 @@ export default function Patients() {
         {/* Patients Table */}
         <Card className="glass-effect border-border/50">
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-card/30">
-                    <TableHead className="px-6 py-4">Patient</TableHead>
-                    <TableHead className="px-6 py-4">Contact</TableHead>
-                    <TableHead className="px-6 py-4">Age/Gender</TableHead>
-                    <TableHead className="px-6 py-4">Medical History</TableHead>
-                    <TableHead className="px-6 py-4 text-right">Account Balance</TableHead>
-                    <TableHead className="px-6 py-4 text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    [...Array(5)].map((_, i) => (
-                      <TableRow key={i}>
-                        <TableCell className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            <Skeleton className="w-10 h-10 rounded-full" />
-                            <div>
-                              <Skeleton className="h-4 w-24 mb-1" />
-                              <Skeleton className="h-3 w-16" />
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="px-6 py-4">
-                          <Skeleton className="h-4 w-32 mb-1" />
-                          <Skeleton className="h-3 w-40" />
-                        </TableCell>
-                        <TableCell className="px-6 py-4">
-                          <Skeleton className="h-4 w-16" />
-                        </TableCell>
-                        <TableCell className="px-6 py-4">
-                          <Skeleton className="h-6 w-20" />
-                        </TableCell>
-                        <TableCell className="px-6 py-4">
-                          <div className="flex space-x-2">
-                            <Skeleton className="w-8 h-8" />
-                            <Skeleton className="w-8 h-8" />
-                            <Skeleton className="w-8 h-8" />
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : filteredPatients.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="px-6 py-12 text-center text-muted-foreground">
-                        {searchTerm ? "No patients found matching your search" : "No patients found"}
-                      </TableCell>
+            <ProgressiveLoading
+              isLoading={isLoading}
+              error={error as Error | null}
+              isEmpty={!filteredPatients || filteredPatients.length === 0}
+              onRetry={() => refetch()}
+              loadingSkeleton={
+                <div className="p-6">
+                  <TableSkeleton rows={5} columns={6} />
+                </div>
+              }
+              emptyState={
+                <EmptyState
+                  title={
+                    isSearchEmpty
+                      ? "No patients found"
+                      : searchTerm
+                        ? "No matching patients"
+                        : "No patients yet"
+                  }
+                  message={
+                    isSearchEmpty
+                      ? `No patients match "${searchTerm}". Try a different search term or check your filters.`
+                      : searchTerm
+                        ? "Try adjusting your search criteria or filters."
+                        : "Get started by adding your first patient to the system."
+                  }
+                  icon={<Users className="w-6 h-6 text-gray-400" />}
+                  action={
+                    !searchTerm && !isSearchEmpty ? {
+                      label: "Add First Patient",
+                      onClick: () => {
+                        setSelectedPatient(null);
+                        setIsFormOpen(true);
+                      }
+                    } : searchTerm ? {
+                      label: "Clear Search",
+                      onClick: () => {
+                        setSearchTerm('');
+                        setFilterCriteria({ condition: '', paymentStatus: '' });
+                      }
+                    } : undefined
+                  }
+                />
+              }
+            >
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-card/30">
+                      <TableHead className="px-6 py-4">Patient</TableHead>
+                      <TableHead className="px-6 py-4">Contact</TableHead>
+                      <TableHead className="px-6 py-4">Age/Gender</TableHead>
+                      <TableHead className="px-6 py-4">Medical History</TableHead>
+                      <TableHead className="px-6 py-4 text-right">Account Balance</TableHead>
+                      <TableHead className="px-6 py-4 text-right">Actions</TableHead>
                     </TableRow>
-                  ) : (
-                    filteredPatients.map((patient: Patient) => (
+                  </TableHeader>
+                  <TableBody>
+                    {filteredPatients.map((patient: Patient) => (
                       <TableRow key={patient.id} className="hover:bg-card/30 transition-colors">
                         <TableCell className="px-6 py-4">
                           <div className="flex items-center space-x-3">
@@ -293,22 +325,23 @@ export default function Patients() {
                             >
                               <Edit2 className="w-4 h-4" />
                             </Button>
-                            <Button
+                            <LoadingButton
                               size="sm"
                               variant="ghost"
+                              isLoading={deletePatientMutation.isPending}
                               onClick={() => handleDelete(patient.id)}
                               className="p-2 text-destructive hover:bg-destructive/10"
                             >
                               <Trash2 className="w-4 h-4" />
-                            </Button>
+                            </LoadingButton>
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </ProgressiveLoading>
           </CardContent>
         </Card>
       </div>
